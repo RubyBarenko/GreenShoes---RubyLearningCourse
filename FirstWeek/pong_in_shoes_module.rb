@@ -2,23 +2,23 @@ require 'green_shoes'
 
 WIDTH, HEIGHT = 400, 400
 LEVEL = {Easy:8, Normal:12, Hard:16, Impossible:20}
-
-class PongGame < Shoes
-  url '/', :index
-
+ 
+module PongGame 
   def index
     background black
     stack do
       flow do
-        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], left:100, width:0.75
-        @play = button 'Play', width:100 do
+        stroke :white
+        fill :red
+        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], width:280 #width:0.75 => button will be on the list
+        @play = button 'Play', left:400, width:0.25 do #width:100 not works
           @play.state, @level.state = 'disabled', 'disabled'
           game_start
         end
       end
     end
   end
-
+  
   def game_start
     nostroke; fill "#5F5" .. "#000" # dont works on red shoes.... How can I detect if I'm using green or red shoes?
     @player1 = @player1.show rescue paddle(name:'Player1', x:WIDTH/2 - 40, y:HEIGHT - 18)
@@ -51,7 +51,7 @@ class PongGame < Shoes
       end
     end
   end
-
+  
   def paddle(opts={name:'', x:0, y:0, width:80, height:8, limit:WIDTH})
     p=rect(opts[:x]||=0,opts[:y]||=0,opts[:width]||=80,opts[:height]||=8)
     class << p
@@ -73,7 +73,7 @@ class PongGame < Shoes
     p.name = opts[:name]||=''
     p
   end
-
+  
   def ball(opts={x:0, y:0, radius:6, limits:[WIDTH,HEIGHT], paddle_bottom:nil, paddle_up:nil})
     b = oval(opts[:x]||=0, opts[:y]||=0, opts[:radius]||=6)
     class << b
@@ -135,5 +135,8 @@ class PongGame < Shoes
     b
   end
 end
-
-Shoes.app title:'Pong in Shoes (v.0.2)', width:WIDTH, height:HEIGHT
+ 
+Shoes.app title:'Pong in Shoes (v.0.2)', width:WIDTH, height:HEIGHT do
+  extend PongGame 
+  index
+end
