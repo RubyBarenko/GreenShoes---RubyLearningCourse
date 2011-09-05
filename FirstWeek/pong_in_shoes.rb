@@ -1,4 +1,4 @@
-#require 'green_shoes'
+require 'green_shoes'
 
 WIDTH, HEIGHT = 400, 400
 LEVEL = {Easy:8, Normal:12, Hard:16, Impossible:20}
@@ -10,8 +10,8 @@ class PongGame < Shoes
     background black
     stack do
       flow do
-        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], width:0.75
-        @play = button 'Play', width:0.25 do
+        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], left:100, width:0.75
+        @play = button 'Play', width:100 do
           @play.state, @level.state = 'disabled', 'disabled'
           game_start
         end
@@ -20,7 +20,7 @@ class PongGame < Shoes
   end
 
   def game_start
-    nostroke; fill "#5F5" .. "#292" # dont works on red shoes.... How can I detect if I'm using green or red shoes?
+    nostroke; fill "#5F5" .. "#000" # dont works on red shoes.... How can I detect if I'm using green or red shoes?
     @player1 = @player1.show rescue paddle(name:'Player1', x:WIDTH/2 - 40, y:HEIGHT - 18)
     nostroke; fill "#000".."#F55" # dont works on red shoes....
     @player2 = @player2.show rescue paddle(name:'Computer', x:WIDTH/2 - 40, y:30)
