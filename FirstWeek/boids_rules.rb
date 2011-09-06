@@ -1,6 +1,7 @@
 # gallery10-rules.rb
-N = 12
+N = 15
 BOUND = 3
+LIMITS = [800,600]
 
 module Rules
   def rule1 boid
@@ -28,9 +29,9 @@ module Rules
     vx, vy = 0, 0
     x, y = boid.pos[0], boid.pos[1]
     vx = BOUND if x < 20
-    vx = -BOUND if x > 580
+    vx = -BOUND if x > LIMITS[0] - 25
     vy = BOUND if y < 20
-    vy = -BOUND if y > 480
+    vy = -BOUND if y > LIMITS[1]
     Vector[vx, vy]
   end
 end

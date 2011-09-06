@@ -10,10 +10,8 @@ class PongGame < Shoes
     background black
     stack do
       flow do
-        stroke :white
-        fill :red
-        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], width:280 #width:0.75 => button will be on the list
-        @play = button 'Play', left:400, width:0.25 do #width:100 not works
+        @level = list_box items:LEVEL.keys, choose: LEVEL.keys[1], left:100, width:0.75
+        @play = button 'Play', width:100 do
           @play.state, @level.state = 'disabled', 'disabled'
           game_start
         end
