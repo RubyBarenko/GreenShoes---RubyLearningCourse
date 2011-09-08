@@ -2,19 +2,27 @@ require 'green_shoes'
 require 'matrix'
 
 class Route
-	attr_accessor :pheromone
 	attr_reader :length, :nodes
 	def initialize(context, from, to)
 		@nodes = [from, to]
 		from.add_route self
 		to.add_route self
-		@pheromone = 30
 		context.strokewidth 3; context.stroke context.black
 		@route = context.line @nodes[0].pos[0], @nodes[0].pos[1], @nodes[1].pos[0], @nodes[1].pos[1]
 		@length = (@nodes[0].pos - @nodes[1].pos)[0] + (@nodes[0].pos - @nodes[1].pos)[1]
+
+		textX = @nodes[0].pos[0] + (@nodes[1].pos[0] - @nodes[0].pos[0])/2
+		textY = @nodes[0].pos[1] + (@nodes[1].pos[1] - @nodes[0].pos[1])/2
+		@level = context.para 'sss', width:100, height:20, left:textX, top:textY
+		pheromonessssssss = 30
 	end
 	def pheromone_evaporation()
-		pheromone -= 1
+		pheromonessssssss -= 1
+	end
+	def pheromonessssssss=(value)
+		p 'aaaaaaa'
+		@pheromone = value
+		@level.text = value
 	end
 end
 
@@ -63,18 +71,21 @@ class Ant
 		@nest = nest
 		teleport_to_nest
 	end
-	def choose_route_tendency(route)
-		@genes[0] * Math::sin(@genes[1] * route.pheromone + @genes[2])
-	end
 	def on_the_road?()
 		!! @current_route
 	end
 	def walk()
 		@distance_remaining -= 10 if @current_route
+		if @distance_remaining <= 0 then
+			@distance_remaining = 0
+			@current_route = nil
+		end
 	end
 	def back_to_nest()
 		curr_node = @explored_nodes.pop
-		curr_node.routes.inject(nil){|r0,r| r.nodes.include? @explored_nodes.last}
+		@current_route = curr_node.routes.inject(nil){|r0,r| r.nodes.include? @explored_nodes.last ? r : r0}
+		@distance_remaining = next_route.length
+		put_pheromone
 	end
 	def leave_food()
 		@have_food = false
@@ -87,6 +98,25 @@ class Ant
 	end
 	def pick_food()
 		@have_food = true
+	end
+	def next_route
+		route = nil
+		@target_node.routes.inject(-1) do |c, r| 
+			t = tendency(r)
+			if t > c then
+				route = r
+				t 
+			else
+				c
+			end
+		end
+		@current_route = route
+		@target_node = (route.nodes - [@target_node]).first
+		put_pheromone
+	end
+	private
+	def tendency(route)
+		@genes[0] * Math::sin(@genes[1] * route.pheromone + @genes[2])
 	end
 	def put_pheromone()
 		if @have_food then
@@ -115,17 +145,17 @@ module Menu
 			background black
 			flow height:25 do
 				para fg('Population: ',white), 	width:90, height:20
-				p = edit_line 									width:50, height:20
+				@p = edit_line 									width:50, height:20
 			end
 			background black
 			flow height:25 do
 				para fg('Iterations: ',white), 	width:90, height:20
-				i = edit_line 									width:50, height:20
+				@i = edit_line 									width:50, height:20
 			end
 			background black
 			flow do
 				button 'Start!',								width:1.0, height:20 do
-					start(p, i)
+					start(10, 1000)
 				end
 			end
 		end
@@ -187,7 +217,7 @@ module Civilization
 		(rand(9)+1).times {|t| @colony << Ant.new(@nest)}
 
 		@interaction = 0
-		@animation = animation 10 do
+		@animation = animate 10 do
 
 			@animation.stop if @interaction == interactions
 		end
@@ -207,9 +237,13 @@ module Civilization
 			elsif ant.target_node == @food and not ant.carrying_food? then
 				ant.pick_food
 			elsif ant.carrying_food? then
-				ant.target_node
+				ant.back_to_nest
+			else
+				ant.next_route
 			end
 		end
+
+		@routes.each {|r| r.pheromone_evaporation}
 	end
 
 	def natural_selection()
@@ -220,14 +254,14 @@ module Civilization
 	end
 
 	def best_explorers()
-		male = @colony.inject do |a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
-		female = @colony.delete(male).inject do |a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
+		male = @colony.inject {|a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
+		female = @colony.delete(male).inject {|a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
 		[male, female]
 	end
 
 	def best_workers()
-		male = @colony.inject do |a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
-		female = @colony.delete(male).inject do |a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
+		male = @colony.inject {|a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
+		female = @colony.delete(male).inject {|a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
 		[male, female]
 	end
 
