@@ -2,11 +2,13 @@ require 'green_shoes'
 require 'matrix'
 
 class Route
+	attr_accessor :pheromone
 	attr_reader :length, :nodes
+	
 	def initialize(context, from, to)
 		@nodes = [from, to]
-		from.add_route self
-		to.add_route self
+		@nodes.each{|n| n.add_route self}
+
 		context.strokewidth 3; context.stroke context.black
 		@route = context.line @nodes[0].pos[0], @nodes[0].pos[1], @nodes[1].pos[0], @nodes[1].pos[1]
 		@length = (@nodes[0].pos - @nodes[1].pos)[0] + (@nodes[0].pos - @nodes[1].pos)[1]
@@ -15,18 +17,18 @@ class Route
 		textY = @nodes[0].pos[1] + (@nodes[1].pos[1] - @nodes[0].pos[1])/2
 		@level = context.para '', width:100, height:20, left:textX, top:textY
 
-		self.pheromone = 30
+		@pheromone = 30
+		update_gui
 	end
+
 	def pheromone_evaporation()
-    self.pheromone = @pheromone - 1
+    @pheromone -= 1
 	end
-  def pheromone()
-    @pheromone
-  end
-	def pheromone=(value)
-		@pheromone = value
-		@level.text = value
+	
+	def update_gui()
+		@level.text = @pheromone
 	end
+	
 	def to_s()
 	 "Route(#{object_id}){Length:#{length}, Pheromone:#{@pheromone}, Nodes:#{@nodes.inject(''){|x0,x| "#{x0}#{x.object_id}, "}}}"
 	end
@@ -34,39 +36,47 @@ end
 
 class Node
 	@@number = 0
+	
 	attr_accessor :node
-	attr_reader :radius, :current_status, :routes
+	attr_reader :radius, :current_status, :routes, :pos
+	
 	def initialize(context, x, y)
 		@@number += 1
 		@status = {normal:context.yellow, source:context.blue, food:context.red}
 		@radius = 20
-		@current_status = (@@number == 1 ? :source : :normal)
-		context.nostroke; context.fill @status[@current_status]
+		
+		context.nostroke
 		@node = context.oval left:(x-@radius), top:(y-@radius), radius:@radius
 		@pos = Vector[x,y]
 
 		@name = context.para @@number, width:100, height:20, left:x, top:y
+		change_status
 	end
-	def pos()
-		@pos
-	end
+	
 	def pos=(x, y)
 		@node.left, @node.top = x - @node.width/2, y - @node.height/2
 		@pos = Vector[@node.left+@node.width/2, @node.top+@node.height/2]
 	end
+
 	def add_route(route)
 		(@routes||=[]) << route
 	end
-	def pos=(vector)
-		pos= vector[0], vector[1]
-	end
+
+#	def pos=(vector)
+#		pos= vector[0], vector[1]
+#	end
+
 	def change_status() 
-		return @current_status = :source if @@number == 1 or @current_status == :source
-		allowed_status = @status.keys - [:source]
-		@current_status = allowed_status.rotate[allowed_status.index(@current_status)]
+		if @@number == 1 or @current_status == :source then
+			@current_status = :source
+		else
+			allowed_status = @status.keys - [:source]
+			@current_status = allowed_status.rotate[allowed_status.index(@current_status || :food)]
+		end
 		@node.style fill:@status[@current_status]
-		@name.text = @name.text
+		@name.text = @name.text # put text in front of the fill
 	end
+
 	def to_s()
    "Node(#{object_id}){Type:#{@current_status}, Position:#{@pos}, Routes:#{@routes.inject(''){|x0,x| "#{x0}#{x.object_id}, "}}}"
   end
@@ -75,101 +85,131 @@ end
 class Ant
 	attr_accessor :genes
 	attr_reader :lost_counter, :food_collected, :target_node
+
 	def initialize(nest, *parents)
-		@genes = [rand(11)-5,rand(11)-5,rand(11)-5] #direction_choice, pheromone acceptance, 
+		@genes = [rand(11)-5,rand(11)-5,rand(11)-5, rand(11)-5]
 		@genes.size.times {|g| @genes[g] = parents.flatten[rand(parents.size)].genes[g]} if parents.any?
 		mutation if rand(20) == 0
 
-		@food_collected = 0
-		@explored_nodes =[]
-		@lost_counter = 0
-		@current_route = nil
+		@food_collected, @lost_counter, @current_route, @explored_nodes = 0, 0, nil, []
 		@nest = nest
 		teleport_to_nest
 	end
+	
 	def on_the_road?()
 		!! @current_route
 	end
+	
 	def walk()
 		@distance_remaining -= 10 if @current_route
 		if @distance_remaining <= 0 then
-			@distance_remaining = 0
-			@current_route = nil
+			@current_route, @distance_remaining = nil, 0
 		end
 	end
-	def back_to_nest()
-		current_node = @explored_nodes.pop
-		p '-----BacktoNest----------------------------------------------------------------------------'
-		p @explored_nodes
-		p current_node
-		current_node.routes.inject(nil){ |r0,r|
-		  if r.nodes.include? current_node then
-		    @current_route = r
-		  else
-		    @current_route = r0
-		  end
-		  p @current_route
-		}
-		@target_node = current_node
-		@distance_remaining = @current_route.length
-		put_pheromone
-	end
+
 	def leave_food()
-		@have_food = false
+		@have_food, @explored_nodes = false, []
 		@food_collected += 1
-		@explored_nodes =[]
 		remember @nest
 	end
+	
 	def carrying_food?
 		@have_food
 	end
+	
 	def pick_food()
 		@have_food = true
 	end
+
 	def next_route
-		route = nil
-		@target_node.routes.inject(-1000) do |c, r| 
+		candidate_routes = []
+		@target_node.routes.inject(-1000) do |max, r| 
       t = tendency(r)
       p "Tendency to Route #{r}: #{t}"
-			if t > c then
-				route = r
-				t 
-			else
-				c
+			if t > max then
+				candidate_routes = [r]
+				max = t
+			elsif t == max then
+				candidate_routes << r
 			end
+			max
 		end
-		@current_route = route
-    @distance_remaining = @current_route.length
-		@target_node = (route.nodes - [@target_node]).first
+		chosen_route = candidate_routes.rotate(@genes[3]).first
+		@current_route, @distance_remaining = chosen_route, chosen_route.length
+		@target_node = (chosen_route.nodes - [@target_node]).first
 		remember @target_node
 		p "Route to #{@target_node}"
 		put_pheromone
 	end
+
   def to_s
    "Ant(#{object_id}){Genes#{@genes}, Food Collected:#{@food_collected}, Lost Counter:#{@lost_counter}, Target Node:#{@target_node}, Current Route:#{@current_route}, Remaining: #{@distance_remaining}, Have Food:#{@have_food}, Memory:{#{@explored_nodes}}}"
   end
+	
+	def back_to_nest()
+		current_node = @explored_nodes.pop
+		p '-----BacktoNest----------------------------------------------------------------------------'
+		p @explored_nodes
+		p "Estou em #{current_node}"
+		p "Lembro que tenho que ir para #{@explored_nodes.last}"
+		@current_route = nil
+		while @current_route.nil?
+			@target_node = @explored_nodes.last
+			@current_route = route_between current_node, @target_node
+			@explored_nodes.pop unless @current_route
+		end
+
+		#current_node.routes.inject(nil) do |r0,r|
+		#  if r.nodes.include? @explored_nodes.last then
+		#    @current_route = r
+		#  else
+		#    @current_route = r0
+		#  end
+		#  p "Rota que usarei: #{@current_route}"
+		#  @current_route
+		#end
+		@target_node = @explored_nodes.last
+		@distance_remaining = @current_route.length
+		put_pheromone
+	end
+
 	private
+
+	def route_between(node1, node2)
+		route = nil
+		node1.routes.each {|r| route = r if r.nodes.include? node2}
+		route
+	end
+
 	def tendency(route)
 		@genes[0] * Math::sin(@genes[1] * route.pheromone + @genes[2])
 	end
+
 	def put_pheromone()
 		if @have_food then
+			p "Estou lotando de feromonio a estrada #{@current_route}"
 			@current_route.pheromone += 100 * (@food_collected + 1)
 		else
 			@current_route.pheromone += 1
 		end
 	end
+
 	def mutation()
-		@genes[rand(3)] = rand(11)-5;
+		@genes[rand(@genes.size)] = rand(11)-5;
 	end
+
 	def remember(node)
-		@explored_nodes << node unless @explored_nodes.member? node
+		if @explored_nodes.member? node then
+			@lost_counter += 1
+		else
+			@explored_nodes << node
+		end
 	end
+	
 	def teleport_to_nest()
 		@target_node = @nest
 		remember @target_node
-		@current_route = nil
-		@distance_remaining = 0
+		@current_route, @distance_remaining = nil, 0
 	end
 end
 
@@ -180,14 +220,14 @@ module Menu
 			flow height:25 do
 				para fg('Iterations: ',white), 		width:90, height:20
 				@menu_interations = edit_line 		width:50, height:20
-        @menu_interations.style text:'1'
+        #@menu_interations.text = '1'
 				
 				button 'Start!',									width:1.0, height:20 do
 					start(@menu_interations.text.to_i)
 				end
 				para
-				@menu_turn = para fg(strong('Turn: '),white), 	width:90, height:20
-				@menu_population = para fg(strong('Pop.: '),white), 	width:90, height:20
+				@menu_turn = para fg(strong('Turn: '),white), 						width:90, height:20
+				@menu_population = para fg(strong('Pop.: '),white), 			width:90, height:20
 				@menu_food_collected = para fg(strong('Food:  '),white), 	width:90, height:20
 			end
 		end
@@ -198,68 +238,76 @@ module Interation
 	def enable_interation
 		click do |b,x,y|
 			if b==1 and x > 140 then #add a node
-				@begin_route = nil
-				node = Node.new(self, x, y)
-				node.node.click do |b,x,y|
-					if b==3 then #add a Route
-						if @begin_route and @begin_route != node then
-							@routes << Route.new(self, @begin_route, node)
-							@begin_route = nil
-						else
-							@begin_route = node
-						end
-					elsif b==2 then
-						node.change_status
-						@food = (node.current_status == :food ? node : nil)
-					end
-				end
-				if @nodes.empty? then
-					node.change_status 
-					@nest = node
-				end
-				@nodes << node
+				add_node_event(x,y)
 			end
 		end
+	end
+	
+	private
+
+	def add_node_event(x, y)
+		@begin_route = nil
+		node = Node.new(self, x, y)
+		node.node.click do |b,x,y|
+			if b==3 then
+				add_route_event(node)
+			elsif b==2 then
+				change_status_event(node)
+			end
+		end
+		if @nodes.empty? then
+			node.change_status 
+			@nest = node
+		end
+		@nodes << node
+	end
+
+	def add_route_event(node)
+		if @begin_route and @begin_route != node then
+			@routes << Route.new(self, @begin_route, node)
+			@begin_route = nil
+		else
+			@begin_route = node
+		end
+	end
+
+	def change_status_event(node)
+		node.change_status
+		@food = (node.current_status == :food ? node : nil)
 	end
 end
 
 module Civilization
 	SELECTION_EPOCH_TO_EACH = 30
 	def load_environment
-		@food_collected = 0
-		@delivered_time = 0
-
-		@nodes ||= []
-		@routes ||= []
-		@colony ||= []
+		@food_collected, @delivered_time, @epoch = 0, 0, 0
+		@nodes  ||= []; @routes ||= []; @colony ||= []
 	end
 
 	def restart()
-		@colony.each {|ant| ant.teleport_to_nest()}
+		@colony.each {|ant| ant.teleport_to_nest}
 		@routes.each {|r| r.pheromone = 30}
 	end
 
 	def start(interactions)
 		load_environment
-		(rand(9)+1).times { @colony << Ant.new(@nest)}
-		@epoch = 0
-		@animation = animate 10 do
-			next_turn
-			@animation.stop if @epoch >= interactions
+		(rand(9)+1).times {@colony << Ant.new(@nest)}
+		#(1).times {@colony << Ant.new(@nest)}
+
+		@animation = animate do
+			@thread = Thread.new{next_turn} unless @thread and @thread.alive?
+			update_gui
+			if @epoch >= interactions then
+				@animation.stop
+				sleep 0.001 while @thread.alive?
+				update_gui true
+			end
 		end
-#    last_refresh_at = Time.now
-#		interactions.times do
-#			next_turn
-#			if (Time.now - last_refresh_at) >= 0.04 then
-#  			Shoes.repaint_all_by_order self
-#  			last_refresh_at = Time.now
-#			end
-#		end
 	end
 
 	def next_turn
 		@epoch += 1
-		natural_selection if (@epoch % SELECTION_EPOCH_TO_EACH) == 0
+		#natural_selection if (@epoch % SELECTION_EPOCH_TO_EACH).zero?
 
 		@colony.each do |ant|
 			if ant.on_the_road? then
@@ -282,11 +330,21 @@ module Civilization
 			end
 		end
 
-		@routes.each {|r| r.pheromone_evaporation}
+		evaporate
+	end
 
+	def update_gui(all=false)
 		@menu_turn.text = fg(stroke('Turn: ') + fg(@epoch, yellow),white)
 		@menu_population.text = fg(stroke('Pop.: ') + fg(@colony.size, yellow),white)
 		@menu_food_collected.text = fg(stroke('Food: ') + fg(@food_collected, yellow),white)
+
+		@routes.each{|r| r.update_gui} if (@epoch % 10).zero? or all
+	end
+
+	private
+
+	def evaporate()
+		@routes.each {|r| r.pheromone_evaporation}
 	end
 
 	def natural_selection()
@@ -296,20 +354,20 @@ module Civilization
 		migration
 	end
 
-	def best_explorers()
-		male = @colony.inject {|a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
+	def best_ants(&condition_blk)
+		male = @colony.inject &condition_blk
 		females = @colony.dup
 		females.delete(male)
-		female = females.inject {|a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
+		female = females.inject &condition_blk
 		[male, female]
 	end
 
+	def best_explorers()
+		best_ants {|a1,a2| (a1.lost_counter <= a2.lost_counter)? a1 : a2}
+	end
+
 	def best_workers()
-		male = @colony.inject {|a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
-		females = @colony.dup
-		females.delete(male)
-		female = females.inject {|a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
-		[male, female]
+		best_ants {|a1,a2| (a1.food_collected > a2.food_collected)? a1 : a2}
 	end
 
 	def kill_losers()
@@ -330,6 +388,4 @@ Shoes.app title:'Route Optimizer', width:800, height:600 do
 	show_menu
 	load_environment
 	enable_interation
-
-
 end
