@@ -1,6 +1,10 @@
 require 'green_shoes'
 require 'matrix'
 
+def p(text)
+  Kernel::p text if /^debug$/i === ARGV[0]
+end
+
 class Route
 	attr_accessor :pheromone
 	attr_reader :length, :nodes
@@ -61,10 +65,6 @@ class Node
 	def add_route(route)
 		(@routes||=[]) << route
 	end
-
-#	def pos=(vector)
-#		pos= vector[0], vector[1]
-#	end
 
 	def change_status() 
 		if @@number == 1 or @current_status == :source then
@@ -148,10 +148,9 @@ class Ant
 	
 	def back_to_nest()
 		current_node = @explored_nodes.pop
-		p '-----BacktoNest----------------------------------------------------------------------------'
 		p @explored_nodes
-		p "Estou em #{current_node}"
-		p "Lembro que tenho que ir para #{@explored_nodes.last}"
+		p "I'm in #{current_node}"
+		p "I must return to #{@explored_nodes.last}"
 		@current_route = nil
 		while @current_route.nil?
 			@target_node = @explored_nodes.last
@@ -159,15 +158,6 @@ class Ant
 			@explored_nodes.pop unless @current_route
 		end
 
-		#current_node.routes.inject(nil) do |r0,r|
-		#  if r.nodes.include? @explored_nodes.last then
-		#    @current_route = r
-		#  else
-		#    @current_route = r0
-		#  end
-		#  p "Rota que usarei: #{@current_route}"
-		#  @current_route
-		#end
 		@target_node = @explored_nodes.last
 		@distance_remaining = @current_route.length
 		put_pheromone
@@ -187,7 +177,7 @@ class Ant
 
 	def put_pheromone()
 		if @have_food then
-			p "Estou lotando de feromonio a estrada #{@current_route}"
+			p "I'm marking the road #{@current_route} with pheromone"
 			@current_route.pheromone += 100 * (@food_collected + 1)
 		else
 			@current_route.pheromone += 1
@@ -237,9 +227,7 @@ end
 module Interation
 	def enable_interation
 		click do |b,x,y|
-			if b==1 and x > 140 then #add a node
-				add_node_event(x,y)
-			end
+			add_node_event(x,y) if b==1 and x > 140
 		end
 	end
 	
@@ -291,8 +279,7 @@ module Civilization
 
 	def start(interactions)
 		load_environment
-		(rand(9)+1).times {@colony << Ant.new(@nest)}
-		#(1).times {@colony << Ant.new(@nest)}
+		(rand(10)+5).times {@colony << Ant.new(@nest)}
 
 		@animation = animate do
 			@thread = Thread.new{next_turn} unless @thread and @thread.alive?
@@ -307,7 +294,7 @@ module Civilization
 
 	def next_turn
 		@epoch += 1
-		#natural_selection if (@epoch % SELECTION_EPOCH_TO_EACH).zero?
+		natural_selection if (@epoch % SELECTION_EPOCH_TO_EACH).zero?
 
 		@colony.each do |ant|
 			if ant.on_the_road? then
