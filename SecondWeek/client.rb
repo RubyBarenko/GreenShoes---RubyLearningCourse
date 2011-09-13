@@ -1,6 +1,5 @@
-#chat_and_client.rb
-require 'socket'
-require 'green_shoes'  #####
+#chat.rb
+require 'green_shoes'
  
 class Client
   def initialize(server = 'localhost', port = 2000)
@@ -16,34 +15,41 @@ class Client
   end
 end
  
-def print_onscreen
-  @client.send @edit_line.text  #####
-  #@text.text = @text.text + @edit_line.text + "\n"
-  @text.text += @client.recieve  #####
+def get_chats
+  while true
+    if text = @client.recieve
+      @text.text += text
+    end
+  end
+end
+ 
+def send_chats
+  @client.send @edit_line.text
   @edit_line.text = ''
   @edit_line.focus
 end
  
 Shoes.app(:height => 400, :width => 400) do
   stack do
-    @text = edit_box :height => 370, :width => 400, :state => 'readonly'  #####
+    @text = edit_box :height => 370, :width => 390, :state => "readonly"
   end
     
   stack do
     flow do
-      @submit = button "submit", :width => 99, :height => 28 do  #####
-        print_onscreen
+      @submit = button "submit", :width => 100 do
+        send_chats
       end
-      @edit_line = edit_line :width => 300
+      @edit_line = edit_line :width => 270
+      @edit_line.focus
     end
   end
- 
-  @client = Client.new  #####
+  
+  @client = Client.new("10.254.254.12")
+  Thread.start {get_chats}
   
   keypress do |k|
     if k.inspect == '"\n"'
-      print_onscreen
+      send_chats
     end
   end
 end
- 
